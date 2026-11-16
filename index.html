@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>3D Physics Sphere & Stars</title>
+  <title>3D Physics Sphere - Infinite Stars & Moons</title>
   <style>
     * {
       margin: 0;
@@ -20,6 +20,21 @@
     }
     canvas {
       display: block;
+    }
+    #scoreBadge {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      padding: 8px 16px;
+      background: rgba(15, 23, 42, 0.75);
+      color: #fbbf24;
+      border: 1px solid rgba(251, 191, 36, 0.35);
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: bold;
+      z-index: 10;
+      backdrop-filter: blur(6px);
+      pointer-events: none;
     }
     #resetBtn {
       position: fixed;
@@ -41,11 +56,17 @@
   </style>
 </head>
 <body>
+  <div id="scoreBadge">★ 0</div>
   <button id="resetBtn">↻ Reset</button>
 
   <script src="https://unpkg.com/three@0.158.0/build/three.min.js"></script>
 
   <script>
+    const scoreBadge = document.getElementById('scoreBadge');
+    const resetBtn = document.getElementById('resetBtn');
+    let score = 0;
+
+    // 1. Scene, Camera နှင့် Renderer တည်ဆောက်ခြင်း
     const scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2(0x090d16, 0.022);
 
@@ -62,8 +83,8 @@
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     document.body.appendChild(renderer.domElement);
 
-    // အလင်းရောင်များ
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    // 2. အလင်းရောင်များ
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
     scene.add(ambientLight);
 
     const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
@@ -73,7 +94,7 @@
     const sphereLight = new THREE.PointLight(0x38bdf8, 2.5, 16);
     scene.add(sphereLight);
 
-    // နောက်ခံ 3D ကြယ်မှုန်များ
+    // 3. နောက်ခံ 3D ကြယ်မှုန်လေးများ
     const bgGeo = new THREE.BufferGeometry();
     const bgCount = 180;
     const bgPositions = new Float32Array(bgCount * 3);
@@ -87,8 +108,8 @@
     const bgStars = new THREE.Points(bgGeo, bgMat);
     scene.add(bgStars);
 
-    // အဓိက 3D စက်လုံး
-    const baseRadius = 0.9;
+    // 4. အဓိက 3D စက်လုံး
+    const baseRadius = 0.85;
     const sphereGeo = new THREE.SphereGeometry(baseRadius, 36, 36);
     const sphereMat = new THREE.MeshStandardMaterial({
       color: 0x38bdf8,
@@ -115,18 +136,19 @@
     // Physics ကိန်းသေများ
     const physics = {
       x: 0,
-      y: 0,
+      y: -2,
       vx: 0,
       vy: 0,
       targetX: 0,
-      targetY: 0,
+      targetY: -2,
       scale: 1,
       targetScale: 1
     };
-    const spring = 0.02;
+    const spring = 0.022;
     const friction = 0.80;
+    const maxScale = 2.4; // စက်လုံး အကြီးဆုံး ဖြစ်နိုင်သည့် အရွယ်အစား
 
-    // 3D ကြယ်ပုံစံ ဖန်တီးခြင်း
+    // 5. 3D ကြယ်ပုံစံ ဖန်တီးခြင်း
     function createStarGeometry(outerR, innerR) {
       const shape = new THREE.Shape();
       const spikes = 5;
@@ -142,21 +164,39 @@
       }
       shape.closePath();
 
-      const extrudeSettings = {
-        depth: 0.22,
+      const geo = new THREE.ExtrudeGeometry(shape, {
+        depth: 0.20,
         bevelEnabled: true,
         bevelSegments: 3,
         steps: 1,
-        bevelSize: 0.07,
-        bevelThickness: 0.08
-      };
-
-      const geo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+        bevelSize: 0.06,
+        bevelThickness: 0.07
+      });
       geo.center();
       return geo;
     }
 
-    const starGeo = createStarGeometry(0.85, 0.38);
+    // 6. 3D လခြမ်းပုံစံ (Crescent Moon) ဖန်တီးခြင်း
+    function createMoonGeometry(outerR) {
+      const shape = new THREE.Shape();
+      shape.moveTo(Math.cos(Math.PI * 0.25) * outerR, Math.sin(Math.PI * 0.25) * outerR);
+      shape.absarc(0, 0, outerR, Math.PI * 0.25, Math.PI * 1.75, false);
+      shape.absarc(0.35, 0, 0.6513, -1.175, 1.175, true);
+      shape.closePath();
+
+      const geo = new THREE.ExtrudeGeometry(shape, {
+        depth: 0.20,
+        bevelEnabled: true,
+        bevelSegments: 3,
+        steps: 1,
+        bevelSize: 0.06,
+        bevelThickness: 0.07
+      });
+      geo.center();
+      return geo;
+    }
+
+    const starGeo = createStarGeometry(0.82, 0.36);
     const starMat = new THREE.MeshStandardMaterial({
       color: 0xfbbf24,
       emissive: 0xd97706,
@@ -165,7 +205,16 @@
       metalness: 0.65
     });
 
-    let stars = [];
+    const moonGeo = createMoonGeometry(0.85);
+    const moonMat = new THREE.MeshStandardMaterial({
+      color: 0xe2e8f0,
+      emissive: 0x60a5fa,
+      emissiveIntensity: 0.35,
+      roughness: 0.2,
+      metalness: 0.7
+    });
+
+    let fallingItems = [];
     let particles = [];
     let shockwaves = [];
 
@@ -175,34 +224,51 @@
       return { vWidth, vHeight };
     }
 
-    function initStars() {
-      stars.forEach(s => scene.remove(s.mesh));
-      stars = [];
-
+    // 7. ကြယ် (သို့) လ အသစ်တစ်ခု အပေါ်မှ ဖန်တီးခြင်း
+    function spawnStarOrMoon() {
       const { vWidth, vHeight } = getVisibleBounds();
-      const positions = [
-        { x: -vWidth * 0.24, y: vHeight * 0.22 },
-        { x: vWidth * 0.24, y: -vHeight * 0.22 }
-      ];
+      const isStar = Math.random() > 0.45; // ကြယ်နှင့် လ ကျပန်းရွေးချယ်ခြင်း
 
-      positions.forEach((pos, index) => {
-        const mesh = new THREE.Mesh(starGeo, starMat);
-        mesh.position.set(pos.x, pos.y, 0);
-        mesh.rotation.y = index * 0.8;
-        mesh.rotation.x = 0.25;
-        scene.add(mesh);
-        stars.push({ mesh, active: true, radius: 0.85 });
+      const mesh = new THREE.Mesh(
+        isStar ? starGeo : moonGeo,
+        isStar ? starMat : moonMat
+      );
+
+      // Screen အကျယ်အတွင်း ကျပန်း X နေရာ
+      const marginX = Math.min(1.2, vWidth * 0.12);
+      const randomX = (Math.random() - 0.5) * (vWidth - marginX * 2);
+      const startY = vHeight * 0.5 + 1.4;
+
+      mesh.position.set(randomX, startY, 0);
+      mesh.rotation.y = Math.random() * Math.PI * 2;
+      mesh.rotation.x = 0.2;
+      scene.add(mesh);
+
+      fallingItems.push({
+        mesh: mesh,
+        type: isStar ? 'star' : 'moon',
+        radius: 0.78,
+        // ဖြေးဖြေးချင်း ဆင်းမည့် အမြန်နှုန်း (တစ်စက္ကန့်လျှင် 1.4 မှ 2.2 ယူနစ်)
+        fallSpeed: 1.4 + Math.random() * 0.8,
+        rotSpeed: (Math.random() > 0.5 ? 1 : -1) * (1.2 + Math.random() * 1.0),
+        swayOffset: Math.random() * Math.PI * 2
       });
     }
 
-    initStars();
+    // 8. ထိမိချိန် Effect ဖန်တီးခြင်း
+    const swGeo = new THREE.RingGeometry(0.4, 0.55, 32);
+    const particleGeo = new THREE.OctahedronGeometry(0.11, 0);
 
-    // ကြယ်ထိမိချိန် Effect
-    const particleGeo = new THREE.OctahedronGeometry(0.12, 0);
-    function trigger3DEffect(x, y) {
-      const swGeo = new THREE.RingGeometry(0.4, 0.55, 32);
+    function trigger3DEffect(x, y, type) {
+      const isStar = type === 'star';
+      const ringColor = isStar ? 0xfbbf24 : 0x93c5fd;
+      const burstColors = isStar
+        ? [0xfbbf24, 0xfef08a, 0xf59e0b, 0xffffff]
+        : [0xe2e8f0, 0x93c5fd, 0x38bdf8, 0xffffff];
+
+      // Shockwave ကွင်း
       const swMat = new THREE.MeshBasicMaterial({
-        color: 0xfbbf24,
+        color: ringColor,
         transparent: true,
         opacity: 1,
         side: THREE.DoubleSide
@@ -212,10 +278,10 @@
       scene.add(swMesh);
       shockwaves.push({ mesh: swMesh, scale: 1, alpha: 1 });
 
-      const colors = [0xfbbf24, 0xfef08a, 0x38bdf8, 0xffffff];
-      for (let i = 0; i < 30; i++) {
+      // 3D အလင်းမှုန်များ
+      for (let i = 0; i < 28; i++) {
         const pMat = new THREE.MeshBasicMaterial({
-          color: colors[Math.floor(Math.random() * colors.length)],
+          color: burstColors[Math.floor(Math.random() * burstColors.length)],
           transparent: true,
           opacity: 1
         });
@@ -224,7 +290,7 @@
 
         const theta = Math.random() * Math.PI * 2;
         const phi = Math.acos((Math.random() * 2) - 1);
-        const speed = 0.08 + Math.random() * 0.18;
+        const speed = 0.08 + Math.random() * 0.16;
 
         scene.add(pMesh);
         particles.push({
@@ -237,7 +303,7 @@
       }
     }
 
-    // Touch / Mouse ထိန်းချုပ်မှု
+    // 9. Touch / Mouse ထိန်းချုပ်မှု
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     const planeZ = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
@@ -284,25 +350,36 @@
     });
 
     // Reset ခလုတ်
-    const resetBtn = document.getElementById('resetBtn');
     function resetGame(e) {
       e.stopPropagation();
+      score = 0;
+      scoreBadge.textContent = '★ 0';
       physics.x = 0;
-      physics.y = 0;
+      physics.y = -2;
       physics.vx = 0;
       physics.vy = 0;
       physics.targetX = 0;
-      physics.targetY = 0;
+      physics.targetY = -2;
       physics.scale = 1;
       physics.targetScale = 1;
       touchMarker.visible = false;
 
-      particles.forEach(p => scene.remove(p.mesh));
+      fallingItems.forEach(item => scene.remove(item.mesh));
+      fallingItems = [];
+
+      particles.forEach(p => {
+        scene.remove(p.mesh);
+        p.mesh.material.dispose();
+      });
       particles = [];
-      shockwaves.forEach(sw => scene.remove(sw.mesh));
+
+      shockwaves.forEach(sw => {
+        scene.remove(sw.mesh);
+        sw.mesh.material.dispose();
+      });
       shockwaves = [];
 
-      initStars();
+      spawnStarOrMoon();
     }
     resetBtn.addEventListener('click', resetGame);
     resetBtn.addEventListener('touchstart', resetGame, { passive: false });
@@ -313,72 +390,118 @@
       renderer.setSize(window.innerWidth, window.innerHeight);
     });
 
-    // Animation Loop
+    // စစချင်းတွင် တစ်ခု စတင်ထုတ်ပေးထားခြင်း
+    spawnStarOrMoon();
+
+    // 10. Animation Loop
+    const clock = new THREE.Clock();
+    let spawnTimer = 0;
+    const spawnInterval = 1.6; // ၁.၆ စက္ကန့်တိုင်း ကြယ်/လ အသစ်တစ်ခု ထွက်မည်
+
     function animate() {
       requestAnimationFrame(animate);
 
-      const ax = (physics.targetX - physics.x) * spring;
-      const ay = (physics.targetY - physics.y) * spring;
-      physics.vx = (physics.vx + ax) * friction;
-      physics.vy = (physics.vy + ay) * friction;
-      physics.x += physics.vx;
-      physics.y += physics.vy;
+      const dt = Math.min(clock.getDelta(), 0.05);
+      const step = dt * 60; // 60Hz နှင့် 120Hz ဖုန်းများတွင် အမြန်နှုန်း တူညီစေရန်
+
+      // အကန့်အသတ်မရှိ အသစ်များ ထုတ်ပေးခြင်း
+      spawnTimer += dt;
+      if (spawnTimer >= spawnInterval) {
+        spawnTimer = 0;
+        spawnStarOrMoon();
+      }
+
+      // စက်လုံး Physics တွက်ချက်ခြင်း
+      const ax = (physics.targetX - physics.x) * spring * step;
+      const ay = (physics.targetY - physics.y) * spring * step;
+      physics.vx = (physics.vx + ax) * Math.pow(friction, step);
+      physics.vy = (physics.vy + ay) * Math.pow(friction, step);
+      physics.x += physics.vx * step;
+      physics.y += physics.vy * step;
 
       sphereMesh.position.set(physics.x, physics.y, 0);
-      sphereMesh.rotation.y += physics.vx * 0.4;
-      sphereMesh.rotation.x -= physics.vy * 0.4;
+      sphereMesh.rotation.y += physics.vx * 0.4 * step;
+      sphereMesh.rotation.x -= physics.vy * 0.4 * step;
       sphereLight.position.set(physics.x, physics.y, 1.8);
 
-      physics.scale += (physics.targetScale - physics.scale) * 0.12;
+      // စက်လုံး အရွယ်အစား ညက်ညက်ညောညော ကြီးလာစေခြင်း
+      physics.scale += (physics.targetScale - physics.scale) * 0.1 * step;
       sphereMesh.scale.set(physics.scale, physics.scale, physics.scale);
       const currentSphereRadius = baseRadius * physics.scale;
 
-      for (let star of stars) {
-        if (!star.active) continue;
+      // ကြယ်နှင့် လများ ဖြေးဖြေးချင်း အောက်သို့ ဆင်းခြင်း
+      const { vHeight } = getVisibleBounds();
+      const bottomLimit = -vHeight * 0.5 - 2.0;
 
-        star.mesh.rotation.y += 0.03;
-        star.mesh.rotation.z = Math.sin(Date.now() * 0.002) * 0.2;
+      for (let i = fallingItems.length - 1; i >= 0; i--) {
+        const item = fallingItems[i];
 
-        const dist = Math.hypot(physics.x - star.mesh.position.x, physics.y - star.mesh.position.y);
-        if (dist < currentSphereRadius + star.radius) {
-          star.active = false;
-          star.mesh.visible = false;
-          physics.targetScale += 0.35;
+        // အောက်သို့ ဖြေးဖြေးဆင်းခြင်းနှင့် ဝင်ရိုးပေါ်တွင် လည်ပတ်ခြင်း
+        item.mesh.position.y -= item.fallSpeed * dt;
+        item.mesh.rotation.y += item.rotSpeed * dt;
+        item.mesh.rotation.z = Math.sin(Date.now() * 0.002 + item.swayOffset) * 0.25;
+
+        // စက်လုံးနှင့် ထိမိခြင်း ရှိ/မရှိ စစ်ဆေးခြင်း
+        const dist = Math.hypot(
+          physics.x - item.mesh.position.x,
+          physics.y - item.mesh.position.y
+        );
+
+        if (dist < currentSphereRadius + item.radius) {
+          score += 1;
+          scoreBadge.textContent = '★ ' + score;
+
+          // စက်လုံး အနည်းငယ်စီ ကြီးလာမည် (maxScale အထိ)
+          if (physics.targetScale < maxScale) {
+            physics.targetScale = Math.min(maxScale, physics.targetScale + 0.07);
+          }
+
           sphereLight.intensity = 5.5;
-          trigger3DEffect(star.mesh.position.x, star.mesh.position.y);
+          trigger3DEffect(item.mesh.position.x, item.mesh.position.y, item.type);
+
+          scene.remove(item.mesh);
+          fallingItems.splice(i, 1);
+          continue;
+        }
+
+        // အောက်ခြေသို့ လွန်သွားပါက ဖယ်ရှားခြင်း
+        if (item.mesh.position.y < bottomLimit) {
+          scene.remove(item.mesh);
+          fallingItems.splice(i, 1);
         }
       }
 
       if (sphereLight.intensity > 2.5) {
-        sphereLight.intensity += (2.5 - sphereLight.intensity) * 0.1;
+        sphereLight.intensity += (2.5 - sphereLight.intensity) * 0.1 * step;
       }
 
+      // Shockwave Update
       for (let i = shockwaves.length - 1; i >= 0; i--) {
         const sw = shockwaves[i];
-        sw.scale += 0.22;
-        sw.alpha -= 0.035;
+        sw.scale += 0.22 * step;
+        sw.alpha -= 0.035 * step;
         sw.mesh.scale.set(sw.scale, sw.scale, 1);
         sw.mesh.material.opacity = sw.alpha;
 
         if (sw.alpha <= 0) {
           scene.remove(sw.mesh);
-          sw.mesh.geometry.dispose();
           sw.mesh.material.dispose();
           shockwaves.splice(i, 1);
         }
       }
 
+      // Particles Update
       for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
-        p.mesh.position.x += p.vx;
-        p.mesh.position.y += p.vy;
-        p.mesh.position.z += p.vz;
-        p.vx *= 0.94;
-        p.vy *= 0.94;
-        p.vz *= 0.94;
-        p.mesh.rotation.x += 0.1;
-        p.mesh.rotation.y += 0.1;
-        p.alpha -= 0.025;
+        p.mesh.position.x += p.vx * step;
+        p.mesh.position.y += p.vy * step;
+        p.mesh.position.z += p.vz * step;
+        p.vx *= Math.pow(0.94, step);
+        p.vy *= Math.pow(0.94, step);
+        p.vz *= Math.pow(0.94, step);
+        p.mesh.rotation.x += 0.1 * step;
+        p.mesh.rotation.y += 0.1 * step;
+        p.alpha -= 0.025 * step;
         p.mesh.material.opacity = p.alpha;
 
         if (p.alpha <= 0) {
@@ -388,13 +511,11 @@
         }
       }
 
-      bgStars.rotation.y += 0.0005;
-
+      bgStars.rotation.y += 0.0005 * step;
       renderer.render(scene, camera);
     }
 
     animate();
   </script>
 </body>
-  </html>
-  
+</html>
