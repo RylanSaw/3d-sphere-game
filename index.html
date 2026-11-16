@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>3D Physics Sphere - Infinite Stars & Moons</title>
+  <title>3D Star & Moon Catcher</title>
   <style>
     * {
       margin: 0;
@@ -16,39 +16,131 @@
       overflow: hidden;
       background-color: #090d16;
       touch-action: none;
-      font-family: sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
     canvas {
       display: block;
     }
-    #scoreBadge {
+
+    /* စစဝင်ချင်း ပေါ်မည့် Start Screen UI */
+    #startOverlay {
       position: fixed;
-      top: 16px;
-      left: 16px;
-      padding: 8px 16px;
-      background: rgba(15, 23, 42, 0.75);
-      color: #fbbf24;
-      border: 1px solid rgba(251, 191, 36, 0.35);
-      border-radius: 20px;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(9, 13, 22, 0.65);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      z-index: 20;
+      padding: 20px;
+      transition: opacity 0.4s ease;
+    }
+    .start-card {
+      width: 100%;
+      max-width: 360px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 24px;
+      padding: 32px 24px;
+      text-align: center;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(56, 189, 248, 0.15);
+    }
+    .game-icon {
+      font-size: 42px;
+      margin-bottom: 12px;
+      text-shadow: 0 0 20px rgba(251, 191, 36, 0.6);
+    }
+    .game-title {
+      color: #f8fafc;
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    .game-subtitle {
+      color: #94a3b8;
+      font-size: 13px;
+      margin-bottom: 20px;
+    }
+    .creator-box {
+      display: inline-block;
+      background: rgba(30, 41, 59, 0.9);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      color: #38bdf8;
       font-size: 14px;
-      font-weight: bold;
+      font-weight: 600;
+      padding: 8px 16px;
+      border-radius: 12px;
+      margin-bottom: 28px;
+    }
+    #startBtn {
+      width: 100%;
+      padding: 14px 24px;
+      background: linear-gradient(135deg, #0284c7, #38bdf8);
+      color: #090d16;
+      font-size: 17px;
+      font-weight: 800;
+      border: none;
+      border-radius: 16px;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(56, 189, 248, 0.4);
+      transition: transform 0.15s ease;
+    }
+    #startBtn:active {
+      transform: scale(0.96);
+    }
+
+    /* ဂိမ်းဆော့နေစဉ် အပေါ်ဘက်တွင် ပြမည့် အချက်အလက်များ */
+    #hud {
+      position: fixed;
+      top: 14px;
+      left: 14px;
+      right: 14px;
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
       z-index: 10;
-      backdrop-filter: blur(6px);
       pointer-events: none;
     }
-    #resetBtn {
-      position: fixed;
-      top: 16px;
-      right: 16px;
-      padding: 8px 16px;
-      background: rgba(15, 23, 42, 0.75);
-      color: #e2e8f0;
-      border: 1px solid rgba(56, 189, 248, 0.45);
+    .hud-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .hud-pill {
+      padding: 7px 13px;
+      background: rgba(15, 23, 42, 0.78);
       border-radius: 20px;
-      font-size: 14px;
-      cursor: pointer;
-      z-index: 10;
+      font-size: 13px;
+      font-weight: 700;
       backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+    #hitBadge {
+      color: #fbbf24;
+      border: 1px solid rgba(251, 191, 36, 0.4);
+    }
+    #timeBadge {
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      font-variant-numeric: tabular-nums;
+    }
+    #resetBtn {
+      pointer-events: auto;
+      padding: 7px 14px;
+      background: rgba(15, 23, 42, 0.78);
+      color: #e2e8f0;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      flex-shrink: 0;
     }
     #resetBtn:active {
       transform: scale(0.95);
@@ -56,15 +148,44 @@
   </style>
 </head>
 <body>
-  <div id="scoreBadge">★ 0</div>
-  <button id="resetBtn">↻ Reset</button>
+
+  <!-- စစဝင်ချင်း ပေါ်မည့် Start Screen UI -->
+  <div id="startOverlay">
+    <div class="start-card">
+      <div class="game-icon">✦ ☾</div>
+      <!-- ဂိမ်းနာမည် ပြင်ဆင်ရန် နေရာ -->
+      <h1 class="game-title">3D ကြယ်နှင့်လ ဖမ်းဂိမ်း</h1>
+      <p class="game-subtitle">Screen ကို လက်ဖြင့်ထိပြီး ကြယ်နှင့်လများကို လိုက်ဖမ်းပါ</p>
+
+      <!-- ပြုလုပ်သူအမည် ပြင်ဆင်ရန် နေရာ -->
+      <div class="creator-box">ပြုလုပ်သူ - [သင့်နာမည်]</div>
+
+      <button id="startBtn">▶ START</button>
+    </div>
+  </div>
+
+  <!-- ဂိမ်းကစားနေစဉ် ပြသမည့် အရေအတွက်နှင့် အချိန်နာရီ -->
+  <div id="hud">
+    <div class="hud-left">
+      <div id="hitBadge" class="hud-pill">✦ တိုက်မိမှု: 0</div>
+      <div id="timeBadge" class="hud-pill">⏱ 00:00</div>
+    </div>
+    <button id="resetBtn">↻ Reset</button>
+  </div>
 
   <script src="https://unpkg.com/three@0.158.0/build/three.min.js"></script>
 
   <script>
-    const scoreBadge = document.getElementById('scoreBadge');
+    const startOverlay = document.getElementById('startOverlay');
+    const startBtn = document.getElementById('startBtn');
+    const hud = document.getElementById('hud');
+    const hitBadge = document.getElementById('hitBadge');
+    const timeBadge = document.getElementById('timeBadge');
     const resetBtn = document.getElementById('resetBtn');
-    let score = 0;
+
+    let isPlaying = false;
+    let hitCount = 0;
+    let elapsedSeconds = 0;
 
     // 1. Scene, Camera နှင့် Renderer တည်ဆောက်ခြင်း
     const scene = new THREE.Scene();
@@ -146,7 +267,7 @@
     };
     const spring = 0.022;
     const friction = 0.80;
-    const maxScale = 2.4; // စက်လုံး အကြီးဆုံး ဖြစ်နိုင်သည့် အရွယ်အစား
+    const maxScale = 2.4;
 
     // 5. 3D ကြယ်ပုံစံ ဖန်တီးခြင်း
     function createStarGeometry(outerR, innerR) {
@@ -176,7 +297,7 @@
       return geo;
     }
 
-    // 6. 3D လခြမ်းပုံစံ (Crescent Moon) ဖန်တီးခြင်း
+    // 6. 3D လခြမ်းပုံစံ ဖန်တီးခြင်း
     function createMoonGeometry(outerR) {
       const shape = new THREE.Shape();
       shape.moveTo(Math.cos(Math.PI * 0.25) * outerR, Math.sin(Math.PI * 0.25) * outerR);
@@ -224,17 +345,15 @@
       return { vWidth, vHeight };
     }
 
-    // 7. ကြယ် (သို့) လ အသစ်တစ်ခု အပေါ်မှ ဖန်တီးခြင်း
     function spawnStarOrMoon() {
       const { vWidth, vHeight } = getVisibleBounds();
-      const isStar = Math.random() > 0.45; // ကြယ်နှင့် လ ကျပန်းရွေးချယ်ခြင်း
+      const isStar = Math.random() > 0.45;
 
       const mesh = new THREE.Mesh(
         isStar ? starGeo : moonGeo,
         isStar ? starMat : moonMat
       );
 
-      // Screen အကျယ်အတွင်း ကျပန်း X နေရာ
       const marginX = Math.min(1.2, vWidth * 0.12);
       const randomX = (Math.random() - 0.5) * (vWidth - marginX * 2);
       const startY = vHeight * 0.5 + 1.4;
@@ -248,14 +367,13 @@
         mesh: mesh,
         type: isStar ? 'star' : 'moon',
         radius: 0.78,
-        // ဖြေးဖြေးချင်း ဆင်းမည့် အမြန်နှုန်း (တစ်စက္ကန့်လျှင် 1.4 မှ 2.2 ယူနစ်)
         fallSpeed: 1.4 + Math.random() * 0.8,
         rotSpeed: (Math.random() > 0.5 ? 1 : -1) * (1.2 + Math.random() * 1.0),
         swayOffset: Math.random() * Math.PI * 2
       });
     }
 
-    // 8. ထိမိချိန် Effect ဖန်တီးခြင်း
+    // 7. ထိမိချိန် Effect ဖန်တီးခြင်း
     const swGeo = new THREE.RingGeometry(0.4, 0.55, 32);
     const particleGeo = new THREE.OctahedronGeometry(0.11, 0);
 
@@ -266,7 +384,6 @@
         ? [0xfbbf24, 0xfef08a, 0xf59e0b, 0xffffff]
         : [0xe2e8f0, 0x93c5fd, 0x38bdf8, 0xffffff];
 
-      // Shockwave ကွင်း
       const swMat = new THREE.MeshBasicMaterial({
         color: ringColor,
         transparent: true,
@@ -278,7 +395,6 @@
       scene.add(swMesh);
       shockwaves.push({ mesh: swMesh, scale: 1, alpha: 1 });
 
-      // 3D အလင်းမှုန်များ
       for (let i = 0; i < 28; i++) {
         const pMat = new THREE.MeshBasicMaterial({
           color: burstColors[Math.floor(Math.random() * burstColors.length)],
@@ -303,13 +419,35 @@
       }
     }
 
-    // 9. Touch / Mouse ထိန်းချုပ်မှု
+    // 8. အချိန်နာရီ ပုံစံပြောင်းလဲခြင်း (MM:SS)
+    function formatTime(totalSec) {
+      const mins = Math.floor(totalSec / 60);
+      const secs = Math.floor(totalSec % 60);
+      const mm = String(mins).padStart(2, '0');
+      const ss = String(secs).padStart(2, '0');
+      return `${mm}:${ss}`;
+    }
+
+    // 9. Start Button နှိပ်သည့်အခါ ဂိမ်းစတင်ခြင်း
+    startBtn.addEventListener('click', () => {
+      isPlaying = true;
+      startOverlay.style.opacity = '0';
+      setTimeout(() => {
+        startOverlay.style.display = 'none';
+      }, 400);
+      hud.style.display = 'flex';
+      clock.getDelta();
+      spawnStarOrMoon();
+    });
+
+    // 10. Touch / Mouse ထိန်းချုပ်မှု (Canvas ပေါ်တွင်သာ)
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     const planeZ = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
     const intersectPoint = new THREE.Vector3();
 
     function updateTargetFromScreen(clientX, clientY) {
+      if (!isPlaying) return;
       pointer.x = (clientX / window.innerWidth) * 2 - 1;
       pointer.y = -(clientY / window.innerHeight) * 2 + 1;
 
@@ -322,21 +460,18 @@
       }
     }
 
-    window.addEventListener('touchstart', (e) => {
-      if (e.target.id === 'resetBtn') return;
+    renderer.domElement.addEventListener('touchstart', (e) => {
       e.preventDefault();
       updateTargetFromScreen(e.touches[0].clientX, e.touches[0].clientY);
     }, { passive: false });
 
-    window.addEventListener('touchmove', (e) => {
-      if (e.target.id === 'resetBtn') return;
+    renderer.domElement.addEventListener('touchmove', (e) => {
       e.preventDefault();
       updateTargetFromScreen(e.touches[0].clientX, e.touches[0].clientY);
     }, { passive: false });
 
     let isMouseDown = false;
-    window.addEventListener('mousedown', (e) => {
-      if (e.target.id === 'resetBtn') return;
+    renderer.domElement.addEventListener('mousedown', (e) => {
       isMouseDown = true;
       updateTargetFromScreen(e.clientX, e.clientY);
     });
@@ -349,11 +484,13 @@
       isMouseDown = false;
     });
 
-    // Reset ခလုတ်
-    function resetGame(e) {
-      e.stopPropagation();
-      score = 0;
-      scoreBadge.textContent = '★ 0';
+    // 11. Reset ခလုတ်
+    resetBtn.addEventListener('click', () => {
+      hitCount = 0;
+      elapsedSeconds = 0;
+      hitBadge.textContent = '✦ တိုက်မိမှု: 0';
+      timeBadge.textContent = '⏱ 00:00';
+
       physics.x = 0;
       physics.y = -2;
       physics.vx = 0;
@@ -379,10 +516,9 @@
       });
       shockwaves = [];
 
+      spawnTimer = 0;
       spawnStarOrMoon();
-    }
-    resetBtn.addEventListener('click', resetGame);
-    resetBtn.addEventListener('touchstart', resetGame, { passive: false });
+    });
 
     window.addEventListener('resize', () => {
       camera.aspect = window.innerWidth / window.innerHeight;
@@ -390,25 +526,31 @@
       renderer.setSize(window.innerWidth, window.innerHeight);
     });
 
-    // စစချင်းတွင် တစ်ခု စတင်ထုတ်ပေးထားခြင်း
-    spawnStarOrMoon();
-
-    // 10. Animation Loop
+    // 12. Animation Loop
     const clock = new THREE.Clock();
     let spawnTimer = 0;
-    const spawnInterval = 1.6; // ၁.၆ စက္ကန့်တိုင်း ကြယ်/လ အသစ်တစ်ခု ထွက်မည်
+    const spawnInterval = 1.6;
 
     function animate() {
       requestAnimationFrame(animate);
 
       const dt = Math.min(clock.getDelta(), 0.05);
-      const step = dt * 60; // 60Hz နှင့် 120Hz ဖုန်းများတွင် အမြန်နှုန်း တူညီစေရန်
+      const step = dt * 60;
 
-      // အကန့်အသတ်မရှိ အသစ်များ ထုတ်ပေးခြင်း
-      spawnTimer += dt;
-      if (spawnTimer >= spawnInterval) {
-        spawnTimer = 0;
-        spawnStarOrMoon();
+      if (isPlaying) {
+        // အချိန်နာရီ တိုးပေးခြင်း
+        elapsedSeconds += dt;
+        timeBadge.textContent = '⏱ ' + formatTime(elapsedSeconds);
+
+        // ကြယ်နှင့် လ အသစ်များ အဆက်မပြတ် ထုတ်ပေးခြင်း
+        spawnTimer += dt;
+        if (spawnTimer >= spawnInterval) {
+          spawnTimer = 0;
+          spawnStarOrMoon();
+        }
+      } else {
+        // Start မနှိပ်ခင် စက်လုံးလေး ငြိမ့်ငြိမ့်လေး လှုပ်ရှားနေစေရန်
+        physics.targetY = -2 + Math.sin(Date.now() * 0.002) * 0.35;
       }
 
       // စက်လုံး Physics တွက်ချက်ခြင်း
@@ -420,38 +562,34 @@
       physics.y += physics.vy * step;
 
       sphereMesh.position.set(physics.x, physics.y, 0);
-      sphereMesh.rotation.y += physics.vx * 0.4 * step;
+      sphereMesh.rotation.y += (physics.vx * 0.4 + 0.008) * step;
       sphereMesh.rotation.x -= physics.vy * 0.4 * step;
       sphereLight.position.set(physics.x, physics.y, 1.8);
 
-      // စက်လုံး အရွယ်အစား ညက်ညက်ညောညော ကြီးလာစေခြင်း
       physics.scale += (physics.targetScale - physics.scale) * 0.1 * step;
       sphereMesh.scale.set(physics.scale, physics.scale, physics.scale);
       const currentSphereRadius = baseRadius * physics.scale;
 
-      // ကြယ်နှင့် လများ ဖြေးဖြေးချင်း အောက်သို့ ဆင်းခြင်း
+      // ကြယ်နှင့် လများ အောက်သို့ ဆင်းခြင်းနှင့် တိုက်မိမှု စစ်ဆေးခြင်း
       const { vHeight } = getVisibleBounds();
       const bottomLimit = -vHeight * 0.5 - 2.0;
 
       for (let i = fallingItems.length - 1; i >= 0; i--) {
         const item = fallingItems[i];
 
-        // အောက်သို့ ဖြေးဖြေးဆင်းခြင်းနှင့် ဝင်ရိုးပေါ်တွင် လည်ပတ်ခြင်း
         item.mesh.position.y -= item.fallSpeed * dt;
         item.mesh.rotation.y += item.rotSpeed * dt;
         item.mesh.rotation.z = Math.sin(Date.now() * 0.002 + item.swayOffset) * 0.25;
 
-        // စက်လုံးနှင့် ထိမိခြင်း ရှိ/မရှိ စစ်ဆေးခြင်း
         const dist = Math.hypot(
           physics.x - item.mesh.position.x,
           physics.y - item.mesh.position.y
         );
 
-        if (dist < currentSphereRadius + item.radius) {
-          score += 1;
-          scoreBadge.textContent = '★ ' + score;
+        if (isPlaying && dist < currentSphereRadius + item.radius) {
+          hitCount += 1;
+          hitBadge.textContent = '✦ တိုက်မိမှု: ' + hitCount;
 
-          // စက်လုံး အနည်းငယ်စီ ကြီးလာမည် (maxScale အထိ)
           if (physics.targetScale < maxScale) {
             physics.targetScale = Math.min(maxScale, physics.targetScale + 0.07);
           }
@@ -464,7 +602,6 @@
           continue;
         }
 
-        // အောက်ခြေသို့ လွန်သွားပါက ဖယ်ရှားခြင်း
         if (item.mesh.position.y < bottomLimit) {
           scene.remove(item.mesh);
           fallingItems.splice(i, 1);
