@@ -1,0 +1,475 @@
+const startOverlay = document.getElementById('startOverlay');
+const startBtn = document.getElementById('startBtn');
+const hud = document.getElementById('hud');
+const hitBadge = document.getElementById('hitBadge');
+const timeBadge = document.getElementById('timeBadge');
+const resetBtn = document.getElementById('resetBtn');
+
+let isPlaying = false;
+let hitCount = 0;
+let elapsedSeconds = 0;
+
+// 1. Scene, Camera နှင့် Renderer တည်ဆောက်ခြင်း
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x090d16, 0.022);
+
+const camera = new THREE.PerspectiveCamera(
+  50,
+  window.innerWidth / window.innerHeight,
+  0.1,
+  1000
+);
+camera.position.set(0, 0, 18);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+// 2. အလင်းရောင်များ
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
+scene.add(ambientLight);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+dirLight.position.set(6, 10, 14);
+scene.add(dirLight);
+
+const sphereLight = new THREE.PointLight(0x38bdf8, 2.5, 16);
+scene.add(sphereLight);
+
+// 3. နောက်ခံ 3D ကြယ်မှုန်လေးများ
+const bgGeo = new THREE.BufferGeometry();
+const bgCount = 180;
+const bgPositions = new Float32Array(bgCount * 3);
+for (let i = 0; i < bgCount * 3; i += 3) {
+  bgPositions[i] = (Math.random() - 0.5) * 45;
+  bgPositions[i + 1] = (Math.random() - 0.5) * 35;
+  bgPositions[i + 2] = -3 - Math.random() * 22;
+}
+bgGeo.setAttribute('position', new THREE.BufferAttribute(bgPositions, 3));
+const bgMat = new THREE.PointsMaterial({ color: 0x64748b, size: 0.14 });
+const bgStars = new THREE.Points(bgGeo, bgMat);
+scene.add(bgStars);
+
+// 4. အဓိက 3D စက်လုံး
+const baseRadius = 0.85;
+const sphereGeo = new THREE.SphereGeometry(baseRadius, 36, 36);
+const sphereMat = new THREE.MeshStandardMaterial({
+  color: 0x38bdf8,
+  emissive: 0x0284c7,
+  emissiveIntensity: 0.45,
+  roughness: 0.2,
+  metalness: 0.3
+});
+const sphereMesh = new THREE.Mesh(sphereGeo, sphereMat);
+scene.add(sphereMesh);
+
+// လက်ထိထားသည့် နေရာပြ 3D ကွင်း
+const markerGeo = new THREE.RingGeometry(0.32, 0.40, 32);
+const markerMat = new THREE.MeshBasicMaterial({
+  color: 0x38bdf8,
+  transparent: true,
+  opacity: 0.45,
+  side: THREE.DoubleSide
+});
+const touchMarker = new THREE.Mesh(markerGeo, markerMat);
+touchMarker.visible = false;
+scene.add(touchMarker);
+
+// Physics ကိန်းသေများ
+const physics = {
+  x: 0,
+  y: -2,
+  vx: 0,
+  vy: 0,
+  targetX: 0,
+  targetY: -2,
+  scale: 1,
+  targetScale: 1
+};
+const spring = 0.022;
+const friction = 0.80;
+const maxScale = 2.4;
+
+// 5. 3D ကြယ်ပုံစံ ဖန်တီးခြင်း
+function createStarGeometry(outerR, innerR) {
+  const shape = new THREE.Shape();
+  const spikes = 5;
+  let rot = (Math.PI / 2) * 3;
+  const step = Math.PI / spikes;
+
+  shape.moveTo(Math.cos(rot) * outerR, Math.sin(rot) * outerR);
+  for (let i = 0; i < spikes; i++) {
+    shape.lineTo(Math.cos(rot) * outerR, Math.sin(rot) * outerR);
+    rot += step;
+    shape.lineTo(Math.cos(rot) * innerR, Math.sin(rot) * innerR);
+    rot += step;
+  }
+  shape.closePath();
+
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth: 0.20,
+    bevelEnabled: true,
+    bevelSegments: 3,
+    steps: 1,
+    bevelSize: 0.06,
+    bevelThickness: 0.07
+  });
+  geo.center();
+  return geo;
+}
+
+// 6. 3D လခြမ်းပုံစံ ဖန်တီးခြင်း
+function createMoonGeometry(outerR) {
+  const shape = new THREE.Shape();
+  shape.moveTo(Math.cos(Math.PI * 0.25) * outerR, Math.sin(Math.PI * 0.25) * outerR);
+  shape.absarc(0, 0, outerR, Math.PI * 0.25, Math.PI * 1.75, false);
+  shape.absarc(0.35, 0, 0.6513, -1.175, 1.175, true);
+  shape.closePath();
+
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth: 0.20,
+    bevelEnabled: true,
+    bevelSegments: 3,
+    steps: 1,
+    bevelSize: 0.06,
+    bevelThickness: 0.07
+  });
+  geo.center();
+  return geo;
+}
+
+const starGeo = createStarGeometry(0.82, 0.36);
+const starMat = new THREE.MeshStandardMaterial({
+  color: 0xfbbf24,
+  emissive: 0xd97706,
+  emissiveIntensity: 0.35,
+  roughness: 0.25,
+  metalness: 0.65
+});
+
+const moonGeo = createMoonGeometry(0.85);
+const moonMat = new THREE.MeshStandardMaterial({
+  color: 0xe2e8f0,
+  emissive: 0x60a5fa,
+  emissiveIntensity: 0.35,
+  roughness: 0.2,
+  metalness: 0.7
+});
+
+let fallingItems = [];
+let particles = [];
+let shockwaves = [];
+
+function getVisibleBounds() {
+  const vHeight = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.position.z;
+  const vWidth = vHeight * camera.aspect;
+  return { vWidth, vHeight };
+}
+
+function spawnStarOrMoon() {
+  const { vWidth, vHeight } = getVisibleBounds();
+  const isStar = Math.random() > 0.45;
+
+  const mesh = new THREE.Mesh(
+    isStar ? starGeo : moonGeo,
+    isStar ? starMat : moonMat
+  );
+
+  const marginX = Math.min(1.2, vWidth * 0.12);
+  const randomX = (Math.random() - 0.5) * (vWidth - marginX * 2);
+  const startY = vHeight * 0.5 + 1.4;
+
+  mesh.position.set(randomX, startY, 0);
+  mesh.rotation.y = Math.random() * Math.PI * 2;
+  mesh.rotation.x = 0.2;
+  scene.add(mesh);
+
+  fallingItems.push({
+    mesh: mesh,
+    type: isStar ? 'star' : 'moon',
+    radius: 0.78,
+    fallSpeed: 1.4 + Math.random() * 0.8,
+    rotSpeed: (Math.random() > 0.5 ? 1 : -1) * (1.2 + Math.random() * 1.0),
+    swayOffset: Math.random() * Math.PI * 2
+  });
+}
+
+// 7. ထိမိချိန် Effect ဖန်တီးခြင်း
+const swGeo = new THREE.RingGeometry(0.4, 0.55, 32);
+const particleGeo = new THREE.OctahedronGeometry(0.11, 0);
+
+function trigger3DEffect(x, y, type) {
+  const isStar = type === 'star';
+  const ringColor = isStar ? 0xfbbf24 : 0x93c5fd;
+  const burstColors = isStar
+    ? [0xfbbf24, 0xfef08a, 0xf59e0b, 0xffffff]
+    : [0xe2e8f0, 0x93c5fd, 0x38bdf8, 0xffffff];
+
+  const swMat = new THREE.MeshBasicMaterial({
+    color: ringColor,
+    transparent: true,
+    opacity: 1,
+    side: THREE.DoubleSide
+  });
+  const swMesh = new THREE.Mesh(swGeo, swMat);
+  swMesh.position.set(x, y, 0);
+  scene.add(swMesh);
+  shockwaves.push({ mesh: swMesh, scale: 1, alpha: 1 });
+
+  for (let i = 0; i < 28; i++) {
+    const pMat = new THREE.MeshBasicMaterial({
+      color: burstColors[Math.floor(Math.random() * burstColors.length)],
+      transparent: true,
+      opacity: 1
+    });
+    const pMesh = new THREE.Mesh(particleGeo, pMat);
+    pMesh.position.set(x, y, 0);
+
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos((Math.random() * 2) - 1);
+    const speed = 0.08 + Math.random() * 0.16;
+
+    scene.add(pMesh);
+    particles.push({
+      mesh: pMesh,
+      vx: Math.sin(phi) * Math.cos(theta) * speed,
+      vy: Math.sin(phi) * Math.sin(theta) * speed,
+      vz: Math.cos(phi) * speed,
+      alpha: 1
+    });
+  }
+}
+
+// 8. အချိန်နာရီ ပုံစံပြောင်းလဲခြင်း (MM:SS)
+function formatTime(totalSec) {
+  const mins = Math.floor(totalSec / 60);
+  const secs = Math.floor(totalSec % 60);
+  const mm = String(mins).padStart(2, '0');
+  const ss = String(secs).padStart(2, '0');
+  return `${mm}:${ss}`;
+}
+
+// 9. Start Button နှိပ်သည့်အခါ ဂိမ်းစတင်ခြင်း
+startBtn.addEventListener('click', () => {
+  isPlaying = true;
+  startOverlay.style.opacity = '0';
+  setTimeout(() => {
+    startOverlay.style.display = 'none';
+  }, 400);
+  hud.style.display = 'flex';
+  clock.getDelta();
+  spawnStarOrMoon();
+});
+
+// 10. Touch / Mouse ထိန်းချုပ်မှု (Canvas ပေါ်တွင်သာ)
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+const planeZ = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+const intersectPoint = new THREE.Vector3();
+
+function updateTargetFromScreen(clientX, clientY) {
+  if (!isPlaying) return;
+  pointer.x = (clientX / window.innerWidth) * 2 - 1;
+  pointer.y = -(clientY / window.innerHeight) * 2 + 1;
+
+  raycaster.setFromCamera(pointer, camera);
+  if (raycaster.ray.intersectPlane(planeZ, intersectPoint)) {
+    physics.targetX = intersectPoint.x;
+    physics.targetY = intersectPoint.y;
+    touchMarker.position.set(intersectPoint.x, intersectPoint.y, 0);
+    touchMarker.visible = true;
+  }
+}
+
+renderer.domElement.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  updateTargetFromScreen(e.touches[0].clientX, e.touches[0].clientY);
+}, { passive: false });
+
+renderer.domElement.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  updateTargetFromScreen(e.touches[0].clientX, e.touches[0].clientY);
+}, { passive: false });
+
+let isMouseDown = false;
+renderer.domElement.addEventListener('mousedown', (e) => {
+  isMouseDown = true;
+  updateTargetFromScreen(e.clientX, e.clientY);
+});
+window.addEventListener('mousemove', (e) => {
+  if (isMouseDown) {
+    updateTargetFromScreen(e.clientX, e.clientY);
+  }
+});
+window.addEventListener('mouseup', () => {
+  isMouseDown = false;
+});
+
+// 11. Reset ခလုတ်
+resetBtn.addEventListener('click', () => {
+  hitCount = 0;
+  elapsedSeconds = 0;
+  hitBadge.textContent = '✦ တိုက်မိမှု: 0';
+  timeBadge.textContent = '⏱ 00:00';
+
+  physics.x = 0;
+  physics.y = -2;
+  physics.vx = 0;
+  physics.vy = 0;
+  physics.targetX = 0;
+  physics.targetY = -2;
+  physics.scale = 1;
+  physics.targetScale = 1;
+  touchMarker.visible = false;
+
+  fallingItems.forEach(item => scene.remove(item.mesh));
+  fallingItems = [];
+
+  particles.forEach(p => {
+    scene.remove(p.mesh);
+    p.mesh.material.dispose();
+  });
+  particles = [];
+
+  shockwaves.forEach(sw => {
+    scene.remove(sw.mesh);
+    sw.mesh.material.dispose();
+  });
+  shockwaves = [];
+
+  spawnTimer = 0;
+  spawnStarOrMoon();
+});
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// 12. Animation Loop
+const clock = new THREE.Clock();
+let spawnTimer = 0;
+const spawnInterval = 1.6;
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const step = dt * 60;
+
+  if (isPlaying) {
+    elapsedSeconds += dt;
+    timeBadge.textContent = '⏱ ' + formatTime(elapsedSeconds);
+
+    spawnTimer += dt;
+    if (spawnTimer >= spawnInterval) {
+      spawnTimer = 0;
+      spawnStarOrMoon();
+    }
+  } else {
+    physics.targetY = -2 + Math.sin(Date.now() * 0.002) * 0.35;
+  }
+
+  // စက်လုံး Physics တွက်ချက်ခြင်း
+  const ax = (physics.targetX - physics.x) * spring * step;
+  const ay = (physics.targetY - physics.y) * spring * step;
+  physics.vx = (physics.vx + ax) * Math.pow(friction, step);
+  physics.vy = (physics.vy + ay) * Math.pow(friction, step);
+  physics.x += physics.vx * step;
+  physics.y += physics.vy * step;
+
+  sphereMesh.position.set(physics.x, physics.y, 0);
+  sphereMesh.rotation.y += (physics.vx * 0.4 + 0.008) * step;
+  sphereMesh.rotation.x -= physics.vy * 0.4 * step;
+  sphereLight.position.set(physics.x, physics.y, 1.8);
+
+  physics.scale += (physics.targetScale - physics.scale) * 0.1 * step;
+  sphereMesh.scale.set(physics.scale, physics.scale, physics.scale);
+  const currentSphereRadius = baseRadius * physics.scale;
+
+  // ကြယ်နှင့် လများ အောက်သို့ ဆင်းခြင်းနှင့် တိုက်မိမှု စစ်ဆေးခြင်း
+  const { vHeight } = getVisibleBounds();
+  const bottomLimit = -vHeight * 0.5 - 2.0;
+
+  for (let i = fallingItems.length - 1; i >= 0; i--) {
+    const item = fallingItems[i];
+
+    item.mesh.position.y -= item.fallSpeed * dt;
+    item.mesh.rotation.y += item.rotSpeed * dt;
+    item.mesh.rotation.z = Math.sin(Date.now() * 0.002 + item.swayOffset) * 0.25;
+
+    const dist = Math.hypot(
+      physics.x - item.mesh.position.x,
+      physics.y - item.mesh.position.y
+    );
+
+    if (isPlaying && dist < currentSphereRadius + item.radius) {
+      hitCount += 1;
+      hitBadge.textContent = '✦ တိုက်မိမှု: ' + hitCount;
+
+      if (physics.targetScale < maxScale) {
+        physics.targetScale = Math.min(maxScale, physics.targetScale + 0.07);
+      }
+
+      sphereLight.intensity = 5.5;
+      trigger3DEffect(item.mesh.position.x, item.mesh.position.y, item.type);
+
+      scene.remove(item.mesh);
+      fallingItems.splice(i, 1);
+      continue;
+    }
+
+    if (item.mesh.position.y < bottomLimit) {
+      scene.remove(item.mesh);
+      fallingItems.splice(i, 1);
+    }
+  }
+
+  if (sphereLight.intensity > 2.5) {
+    sphereLight.intensity += (2.5 - sphereLight.intensity) * 0.1 * step;
+  }
+
+  // Shockwave Update
+  for (let i = shockwaves.length - 1; i >= 0; i--) {
+    const sw = shockwaves[i];
+    sw.scale += 0.22 * step;
+    sw.alpha -= 0.035 * step;
+    sw.mesh.scale.set(sw.scale, sw.scale, 1);
+    sw.mesh.material.opacity = sw.alpha;
+
+    if (sw.alpha <= 0) {
+      scene.remove(sw.mesh);
+      sw.mesh.material.dispose();
+      shockwaves.splice(i, 1);
+    }
+  }
+
+  // Particles Update
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.mesh.position.x += p.vx * step;
+    p.mesh.position.y += p.vy * step;
+    p.mesh.position.z += p.vz * step;
+    p.vx *= Math.pow(0.94, step);
+    p.vy *= Math.pow(0.94, step);
+    p.vz *= Math.pow(0.94, step);
+    p.mesh.rotation.x += 0.1 * step;
+    p.mesh.rotation.y += 0.1 * step;
+    p.alpha -= 0.025 * step;
+    p.mesh.material.opacity = p.alpha;
+
+    if (p.alpha <= 0) {
+      scene.remove(p.mesh);
+      p.mesh.material.dispose();
+      particles.splice(i, 1);
+    }
+  }
+
+  bgStars.rotation.y += 0.0005 * step;
+  renderer.render(scene, camera);
+}
+
+animate();
+  
